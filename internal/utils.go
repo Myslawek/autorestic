@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"github.com/cupcakearmy/autorestic/internal/colors"
 	"github.com/cupcakearmy/autorestic/internal/flags"
 	"github.com/fatih/color"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 func CheckIfCommandIsCallable(cmd string) bool {
@@ -115,4 +118,49 @@ func ArrayContains[T comparable](arr []T, needle T) bool {
 		}
 	}
 	return false
+}
+
+func OmitEmpty(settings map[string]any) map[string]any {
+	jsonSettings, _ := json.Marshal(settings)
+	fmt.Println(string(jsonSettings))
+	sanitizedSettings := make(map[string]any)
+	for key, value := range settings {
+		switch casted := value.(type) {
+		case map[string]any:
+			innerSettings := OmitEmpty(casted)
+			if len(innerSettings) > 0 {
+				sanitizedSettings[key] = innerSettings
+			}
+		case string:
+			if casted != "" {
+				sanitizedSettings[key] = casted
+			}
+		case []any:
+			if len(casted) > 0 {
+				sanitizedSettings[key] = casted
+			}
+		case nil:
+			// skip
+		default:
+			sanitizedSettings[key] = casted
+		}
+	}
+	return sanitizedSettings
+}
+
+func WriteConfig() error {
+	viper.WriteConfig()
+	flags := os.O_CREATE | os.O_TRUNC | os.O_WRONLY
+	file, err := os.OpenFile(viper.ConfigFileUsed(), flags, 0o644)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+	sanitizedSettings := OmitEmpty(viper.AllSettings())
+	if err := yaml.NewEncoder(file).Encode(sanitizedSettings); err != nil {
+		return err
+	}
+
+	return file.Sync()
 }

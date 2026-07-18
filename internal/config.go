@@ -288,7 +288,7 @@ func (c *Config) SaveConfig() error {
 	viper.Set("backends", c.Backends)
 	viper.Set("locations", c.Locations)
 
-	return viper.WriteConfig()
+	return WriteConfig()
 }
 
 func optionToString(option string) string {

@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"os"
 	"path"
 	"reflect"
 	"strconv"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestOptionToString(t *testing.T) {
@@ -188,6 +191,60 @@ func TestSaveConfigProducesReadableConfig(t *testing.T) {
 	readConfig := GetConfig()
 	assert.NotNil(t, readConfig)
 	assert.Equal(t, c, *readConfig)
+}
+
+func TestSaveConfigProducesMinimalFile(t *testing.T) {
+	// given
+	autoresticFile := path.Join(t.TempDir(), ".autorestic.yml")
+	viper.SetConfigFile(autoresticFile)
+
+	// Required to appease the config reader
+	viper.Set("version", 2)
+
+	c := Config{
+		Version: "2",
+		Backends: map[string]Backend{
+			"test": {
+				name: "test-backend",
+				Type: "local",
+				Path: "backend-path",
+			},
+		},
+		Locations: map[string]Location{
+			"test": {
+				Type:         "local",
+				name:         "test-location",
+				ForgetOption: "",
+			},
+		},
+	}
+
+	// when
+	err := c.SaveConfig()
+
+	// then
+	assert.NoError(t, err)
+	data, err := os.ReadFile(autoresticFile)
+	assert.NoError(t, err)
+	var actual map[string]any
+	err = yaml.Unmarshal(data, &actual)
+	require.NoError(t, err)
+
+	expected := map[string]interface{}{
+		"backends": map[string]interface{}{
+			"test": map[string]interface{}{
+				"path": "backend-path",
+				"type": "local",
+			},
+		},
+		"locations": map[string]interface{}{
+			"test": map[string]interface{}{
+				"type": "local",
+			},
+		},
+		"version": 2,
+	}
+	assert.Equal(t, expected, actual)
 }
 
 func assertEqual[T comparable](t testing.TB, result, expected T) {
